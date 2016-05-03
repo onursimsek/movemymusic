@@ -1,0 +1,8 @@
+*node_modules
+/assets/vendors
+/.idea
+/.vagrant
+.DS_Store
+Thumbs.db
+Vagrantfile
+CONTRIBUTING.md
