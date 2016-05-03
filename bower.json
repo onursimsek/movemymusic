@@ -1,0 +1,27 @@
+{
+  "name": "move-my-music",
+  "homepage": "https://github.com/onursimsek/movemymusic",
+  "authors": [
+    "Onur Şimşek <posta@onursimsek.com>"
+  ],
+  "description": "",
+  "main": "",
+  "keywords": [
+    "music",
+    "spotify",
+    "deezer"
+  ],
+  "license": "MIT",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "assets/vendors",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "vue": "^1.0.21",
+    "vue-resource": "^0.7.0"
+  }
+}

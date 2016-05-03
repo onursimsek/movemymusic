@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="tr" xmlns:v-bind="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, user-scalable=1, initial-scale=1, maximum-scale=1">
+    <title>MoveMyMusic</title>
+
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.6/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body class="moveMyMusicApp container">
+<section class="row">
+    <div class="col-md-8 col-md-offset-2">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label for="source">source</label>
+                    <select name="source" id="source" class="form-control" v-model="source">
+                        <option v-for="provider in providers" :value="provider.value">{{ provider.text }}</option>
+                    </select>
+                    <button v-if="!loginStatus(source)" class="btn btn-block" @click="login(source)">LOGIN</button>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label for="target">target</label>
+                    <select name="target" id="target" class="form-control" v-model="target">
+                        <option v-for="provider in providers" :value="provider.value">{{ provider.text }}</option>
+                    </select>
+                    <button v-if="!loginStatus(target)" class="btn btn-block" @click="login(target)">LOGIN</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="row">
+    <div class="col-md-8 col-md-offset-4">
+
+    </div>
+</section>
+
+<section class="row">
+    <div class="col-md-8 col-md-offset-4">
+
+    </div>
+</section>
+
+<div id="dz-root"></div>
+<script src="//cdnjs.cloudflare.com/ajax/libs/vue/1.0.21/vue.min.js"></script>
+<script src="//e-cdn-files.deezer.com/js/min/dz.js"></script>
+<script src="assets/js/script.js"></script>
+</body>
+</html>
