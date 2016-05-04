@@ -1,2 +1,7 @@
 body{background-color: #D0E799}
 button{background-color: #6D0839; color: #D8C358}
+
+.fetch-playlists{}
+.fetch-playlists .media-object{width: 100px;}
+
+.debug-bar{max-height: 200px; overflow: scroll; opacity: .2}

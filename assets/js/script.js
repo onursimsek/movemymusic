@@ -13,8 +13,16 @@ var moveMyMusicStorage = {
 new Vue({
     el: '.moveMyMusicApp',
     data: Object.assign({
-        source: 'deezer',
-        target: 'spotify',
+        source: {
+            name: 'deezer',
+            playlists: [],
+            tracks: []
+        },
+        target: {
+            name: 'spotify',
+            playlists: [],
+            tracks: []
+        },
         providers: [
             {text: 'Deezer', value: 'deezer'},
             {text: 'Spotify', value: 'spotify'}
@@ -24,6 +32,7 @@ new Vue({
             status: false,
             accessToken: '',
             response: {}
+
         },
         spotify: {
             status: false,
@@ -31,14 +40,19 @@ new Vue({
             response: {}
         }
     }, moveMyMusicStorage.get()),
-    created: function () {
+    ready: function () {
+        var that = this;
         var args = parseArgs();
 
         if ('access_token' in args) {
             this.spotify.status = true;
             this.spotify.response = args;
             this.spotify.accessToken = args['access_token'];
+
+            moveMyMusicStorage.set(JSON.parse(JSON.stringify(that.$data)));
         }
+
+        this.deezerLoginStatus();
     },
     methods: {
         loginStatus: function (provider) {
@@ -57,13 +71,16 @@ new Vue({
                     return false;
             }
         },
-        deezerLogin: function () {
-            var that = this;
-
+        deezerInit: function () {
             DZ.init({
                 appId: '163985',
                 channelUrl: APP_URL + '/channel.html'
             });
+        },
+        deezerLogin: function () {
+            var that = this;
+
+            that.deezerInit();
 
             DZ.login(function (response) {
                 if (!response.status || !response.authResponse) {
@@ -79,6 +96,19 @@ new Vue({
                 moveMyMusicStorage.set(JSON.parse(JSON.stringify(that.$data)));
             }, {perms: 'basic_access,email'});
         },
+        deezerLoginStatus: function () {
+            var that = this;
+
+            if (that.deezer.status) {
+                that.deezerInit();
+
+                DZ.getLoginStatus(function (response) {
+                    if (!response.authResponse) {
+                        that.deezer.status = false;
+                    }
+                });
+            }
+        },
         spotifyLogin: function () {
             var clientId = 'b8a1908692314b44852927d11ff15234';
 
@@ -90,6 +120,29 @@ new Vue({
             arg.push('scope=user-library-read');
 
             document.location = src + arg.join('&');
+        },
+        getPlaylists: function (provider, type) {
+            var that = this;
+
+            switch (provider) {
+                case 'deezer':
+                    DZ.api('user/me/playlists', 'GET', function (response) {
+                        response.data.forEach(function (r) {
+                            that[type].playlists.push({
+                                id: r.id,
+                                title: r.title,
+                                liked: r.fans,
+                                picture: r.picture_big,
+                                created_at: r.creation_date
+                            });
+                        });
+                    });
+                    break;
+                case 'spotify':
+                    break;
+                default:
+                    return false;
+            }
         }
     }
 });
