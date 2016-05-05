@@ -10,67 +10,8 @@ var moveMyMusicStorage = {
     }
 };
 
-new Vue({
-    el: '.moveMyMusicApp',
-    data: Object.assign({
-        source: {
-            name: 'deezer',
-            playlists: [],
-            tracks: []
-        },
-        target: {
-            name: 'spotify',
-            playlists: [],
-            tracks: []
-        },
-        providers: [
-            {text: 'Deezer', value: 'deezer'},
-            {text: 'Spotify', value: 'spotify'}
-        ],
-        loginError: '',
-        deezer: {
-            status: false,
-            accessToken: '',
-            response: {}
-
-        },
-        spotify: {
-            status: false,
-            accessToken: '',
-            response: {}
-        }
-    }, moveMyMusicStorage.get()),
-    ready: function () {
-        var that = this;
-        var args = parseArgs();
-
-        if ('access_token' in args) {
-            this.spotify.status = true;
-            this.spotify.response = args;
-            this.spotify.accessToken = args['access_token'];
-
-            moveMyMusicStorage.set(JSON.parse(JSON.stringify(that.$data)));
-        }
-
-        this.deezerLoginStatus();
-    },
+var deezerMixin = {
     methods: {
-        loginStatus: function (provider) {
-            return typeof this[provider].status != 'undefined' ? this[provider].status : false;
-        },
-        login: function (provider) {
-            switch (provider) {
-                case 'deezer':
-                    this.deezerLogin();
-                    break;
-                case 'spotify':
-                    this.spotifyLogin();
-                    break;
-                default:
-                    this.loginError = 'Not accepted!';
-                    return false;
-            }
-        },
         deezerInit: function () {
             DZ.init({
                 appId: '163985',
@@ -98,7 +39,6 @@ new Vue({
         },
         deezerLoginStatus: function () {
             var that = this;
-
             if (that.deezer.status) {
                 that.deezerInit();
 
@@ -109,6 +49,24 @@ new Vue({
                 });
             }
         },
+        getDeezerPlaylist: function (type) {
+            var that = this;
+            DZ.api('user/me/playlists', 'GET', function (response) {
+                response.data.forEach(function (r) {
+                    that[type].playlists.push({
+                        id: r.id,
+                        title: r.title,
+                        picture: r.picture_big,
+                        tracks: r.nb_tracks
+                    });
+                });
+            });
+        }
+    }
+};
+
+var spotifyMixin = {
+    methods: {
         spotifyLogin: function () {
             var clientId = 'b8a1908692314b44852927d11ff15234';
 
@@ -121,24 +79,105 @@ new Vue({
 
             document.location = src + arg.join('&');
         },
-        getPlaylists: function (provider, type) {
+        getSpotifyPlaylist: function (type) {
             var that = this;
+            this.spotifyCall(this.spotify.api + '/me/playlists', function (playlists) {
+                playlists.items.forEach(function (r) {
+                    that[type].playlists.push({
+                        id: r.id,
+                        title: r.name,
+                        picture: r.images[0].url,
+                        tracks: r.tracks.total
+                    });
+                })
+            });
+        },
+        spotifyCall: function (url, callback, method) {
+            var method = method || 'get';
 
+            Vue.http.headers.common['Authorization'] = 'Bearer ' + this.spotify.accessToken;
+
+            this.$http({url: url, method: method}).then(function (response) {
+                callback(response.data);
+            });
+        }
+    }
+};
+
+new Vue({
+    el: '.moveMyMusicApp',
+    data: Object.assign({
+        source: {
+            name: 'deezer',
+            playlists: [],
+            tracks: []
+        },
+        target: {
+            name: 'spotify',
+            playlists: [],
+            tracks: []
+        },
+        providers: [
+            {text: 'Deezer', value: 'deezer'},
+            {text: 'Spotify', value: 'spotify'}
+        ],
+        loginError: '',
+        deezer: {
+            status: false,
+            accessToken: '',
+            response: {}
+
+        },
+        spotify: {
+            api: 'https://api.spotify.com/v1',
+            status: false,
+            accessToken: '',
+            response: {}
+        }
+    }, moveMyMusicStorage.get()),
+    mixins: [deezerMixin, spotifyMixin],
+    ready: function () {
+        var that = this;
+        var args = parseArgs();
+
+        if ('access_token' in args) {
+            that.spotify.status = true;
+            that.spotify.response = args;
+            that.spotify.accessToken = args['access_token'];
+
+            moveMyMusicStorage.set(JSON.parse(JSON.stringify(that.$data)));
+        }
+
+        this.deezerLoginStatus();
+    },
+    methods: {
+        loginStatus: function (provider) {
+            return typeof this[provider].status != 'undefined' ? this[provider].status : false;
+        },
+        login: function (provider) {
             switch (provider) {
                 case 'deezer':
-                    DZ.api('user/me/playlists', 'GET', function (response) {
-                        response.data.forEach(function (r) {
-                            that[type].playlists.push({
-                                id: r.id,
-                                title: r.title,
-                                liked: r.fans,
-                                picture: r.picture_big,
-                                created_at: r.creation_date
-                            });
-                        });
-                    });
+                    this.deezerLogin();
                     break;
                 case 'spotify':
+                    this.spotifyLogin();
+                    break;
+                default:
+                    this.loginError = 'Not accepted!';
+                    return false;
+            }
+        },
+        fetchPlaylist: function () {
+            this.getPlaylist(this.source.name, 'source');
+            this.getPlaylist(this.target.name, 'target');
+        },
+        getPlaylist: function (provider, type) {
+            switch (provider) {
+                case 'deezer':
+                    this.getDeezerPlaylist(type);
+                    break;
+                case 'spotify':
+                    this.getSpotifyPlaylist(type);
                     break;
                 default:
                     return false;

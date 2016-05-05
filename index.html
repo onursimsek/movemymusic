@@ -36,7 +36,7 @@
         <div class="row">
             <div class="col-md-12">
                 <button v-if="loginStatus(source.name) || loginStatus(target.name)" class="btn btn-block"
-                        @click="getPlaylists(source.name, 'source')">FETCH
+                        @click="fetchPlaylist()">FETCH
                 </button>
             </div>
         </div>
@@ -44,15 +44,36 @@
 </section>
 
 <section class="row fetch-playlists">
-    <div class="col-md-6">
+    <div v-if="source.playlists.length" class="col-md-5">
         <h3>{{ source.name }}</h3>
         <section class="playlist">
             <ul class="list-group">
                 <li class="list-group-item media" v-for="playlist in source.playlists">
+                    <span class="badge">move</span>
+                    <span class="badge">hide</span>
                     <div class="media-left">
-                        <a href="#">
-                            <img src="{{ playlist.picture }}" alt="" class="media-object">
-                        </a>
+                        <a href="#"><img src="{{ playlist.picture }}" alt="" class="media-object"></a>
+                    </div>
+                    <div class="media-body">
+                        <h4 class="media-heading">{{ playlist.title }}</h4>
+                        <span class="label label-primary">{{ playlist.tracks }} tracks</span>
+                    </div>
+                </li>
+            </ul>
+        </section>
+    </div>
+
+    <div class="col-md-2">
+
+    </div>
+
+    <div v-if="target.playlists.length" class="col-md-5">
+        <h3>{{ target.name }}</h3>
+        <section class="playlist">
+            <ul class="list-group">
+                <li class="list-group-item media" v-for="playlist in target.playlists">
+                    <div class="media-left">
+                        <a href="#"><img src="{{ playlist.picture }}" alt="" class="media-object"></a>
                     </div>
                     <div class="media-body">
                         <h4 class="media-heading">{{ playlist.title }}</h4>
@@ -74,7 +95,8 @@
 </div>
 
 <div id="dz-root"></div>
-<script src="//cdnjs.cloudflare.com/ajax/libs/vue/1.0.21/vue.min.js"></script>
+<script src="assets/vendors/vue/dist/vue.min.js"></script>
+<script src="assets/vendors/vue-resource/dist/vue-resource.min.js"></script>
 <script src="//e-cdn-files.deezer.com/js/min/dz.js"></script>
 <script src="assets/js/script.js"></script>
 </body>
