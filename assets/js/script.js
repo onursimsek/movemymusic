@@ -26,12 +26,31 @@ var deezer = new Vue({
             accessToken: '',
             response: {}
         },
-        me: {},
+        me: new Me(),
         playlists: [],
         tracks: []
     },
     ready: function () {
         this.getLoginStatus();
+    },
+    watch: {
+        /**
+         * Yeni değer için şarkı listesini al
+         */
+        playlists: {
+            handler: function (val, oldVal) {
+                var newPlaylist = val.filter(function (r) {
+                    return !r.sync
+                })[0];
+
+                this.setPlaylist(newPlaylist);
+                newPlaylist.getTracks().map(function (r) {
+                    this.findTrack(r);
+                });
+                this.setPlaylistTracks(newPlaylist);
+            },
+            deep: true
+        }
     },
     methods: {
         init: function () {
@@ -75,11 +94,9 @@ var deezer = new Vue({
         getMe: function () {
             var that = this;
             DZ.api('/user/me', 'GET', function (response) {
-                that.me = {
-                    id: response.id,
-                    username: response.name,
-                    avatar: response.picture_big
-                };
+                that.me.setId(response.id)
+                    .setUsername(response.name)
+                    .setAvatar(response.picture_big);
             });
         },
         getPlaylists: function () {
@@ -87,21 +104,71 @@ var deezer = new Vue({
             that.playlists = [];
             DZ.api('user/me/playlists', 'GET', function (response) {
                 response.data.forEach(function (r) {
-                    that.playlists.push({
-                        id: r.id,
-                        title: r.title,
-                        picture: r.picture_big,
-                        tracks: r.nb_tracks
-                    });
+                    that.playlists.push(
+                        new Playlist()
+                            .setId(r.id)
+                            .setTitle(r.title)
+                            .setPicture(r.picture_big)
+                    );
                 });
             });
         },
-        setPlaylists: function (title, tracks) {
-            DZ.api('user/me/playlists', 'POST', {title: title}, function (response) {
+        getPlaylist: function (playlistId) {
+            return this.playlists.filter(function (r) {
+                return r.getId() == playlistId;
+            })[0];
+        },
+        setPlaylist: function (playlist) {
+            DZ.api('user/me/playlists', 'POST', {title: playlist.getTitle()}, function (response) {
                 console.log('Playlist created for deezer: ' + response.id);
-                DZ.api('playlist/' + response.id + '/tracks', {songs: tracks}, function (response) {
-                    console.log('Added tracks to playlist');
-                });
+                playlist.setId(response.id).setSync(true);
+            });
+        },
+        getPlaylistTracks: function (playlistId) {
+            var playlist = this.getPlaylist(playlistId);
+            DZ.api('playlist/' + playlist.getId() + '/tracks', 'GET', function (response) {
+                response.data.forEach(function (r) {
+                    playlist.setTracks(
+                        new Track()
+                            .setId(r.id)
+                            .setTitle(r.title)
+                            .setArtist(
+                                new Artist()
+                                    .setId(r.artist.id)
+                                    .setName(r.artist.name)
+                                    .setPicture(r.artist.picture_big)
+                            )
+                            .setAlbum(
+                                new Album()
+                                    .setId(r.album.id)
+                                    .setTitle(r.album.title)
+                                    .setCover(r.album.cover_big)
+                            )
+                    );
+                })
+            });
+        },
+        setPlaylistTracks: function (playlist) {
+            var trackList = [];
+            playlist.getTracks().forEach(function (r) {
+                if (r.getSync()) {
+                    trackList.push(r.getId());
+                }
+            });
+
+            DZ.api('playlist/' + playlist.getId() + '/tracks', {songs: trackList.join(',')}, function (response) {
+                console.log('Added tracks to playlist');
+                playlist.setSync(true);
+            });
+        },
+        findTrack: function (track) {
+            DZ.api('search/track', 'GET', {q: track.getTitle() + ' ' + track.getArtist().getName()}, function (response) {
+                if (!response.data.length) {
+                    console.log(track.getTitle() + ' track is not found on ' + app.target.name);
+                    track.setSync(false);
+                }
+
+                track.setId(response.data[0].id);
             });
         }
     }
@@ -134,6 +201,25 @@ var spotify = new Vue({
     ready: function () {
         this.getLoginStatus();
     },
+    watch: {
+        /**
+         * Yeni değer için şarkı listesini al
+         */
+        playlists: {
+            handler: function (val, oldVal) {
+                var newPlaylist = val.filter(function (r) {
+                    return !r.sync
+                })[0];
+
+                this.setPlaylist(newPlaylist);
+                newPlaylist.getTracks().map(function (r) {
+                    this.findTrack(r);
+                });
+                this.setPlaylistTracks(newPlaylist);
+            },
+            deep: true
+        }
+    },
     methods: {
         call: function (url, data, callback, method) {
             var method = method || 'get';
@@ -148,6 +234,38 @@ var spotify = new Vue({
                 callback(response.data);
             }, function () {
                 this.refreshToken();
+            });
+        },
+        setRefreshToken: function () {
+            Vue.http.headers.common['Authorization'] = 'Basic ' + btoa(this.appId + 'd7a5703c5e7c4cae87f8aff3fcd1c417');
+
+            this.$http.post(
+                'https://accounts.spotify.com/api/token',
+                {
+                    grant_type: 'authorization_code',
+                    code: this.login.accessToken,
+                    redirect_uri: this.callback
+                },
+                function (response) {
+                    this.login.accessToken = response.auth_token;
+                    this.login.refreshToken = response.refresh_token;
+                    this.login.response = response;
+                }
+            );
+        },
+        refreshToken: function () {
+            Vue.http.headers.common['Authorization'] = 'Basic ' + btoa(this.appId + 'd7a5703c5e7c4cae87f8aff3fcd1c417');
+
+            this.$http({
+                url: 'https://accounts.spotify.com/api/token',
+                method: 'post',
+                data: {
+                    grant_type: 'authorization_code',
+                    refresh_token: this.login.refreshToken
+                }
+            }).then(function (response) {
+                this.login.accessToken = response.auth_token;
+                this.login.response = response;
             });
         },
         getLogin: function () {
@@ -194,55 +312,72 @@ var spotify = new Vue({
             that.playlists = [];
             this.call('/me/playlists', {}, function (playlists) {
                 playlists.items.forEach(function (r) {
-                    that.playlists.push({
-                        id: r.id,
-                        title: r.name,
-                        picture: r.images[0].url,
-                        tracks: r.tracks.total
-                    });
+                    that.playlists.push(
+                        new Playlist()
+                            .setId(r.id)
+                            .setTitle(r.name)
+                            .setPicture(r.images[0].url)
+                    );
                 })
             });
         },
-        setPlaylists: function (title, tracks, public) {
-            var public = public || true;
-            var that = this;
-            this.call('/users/' + this.me.id + '/playlists', {name: title, public: public}, function (playlist) {
-                that.call('/users/' + that.me.id + '/playlists/' + playlist.id + '/tracks', {uris: tracks}, function () {
-
-                }, 'post');
+        getPlaylist: function (playlistId) {
+            return this.playlists.filter(function (r) {
+                return r.getId() == playlistId;
+            })[0];
+        },
+        setPlaylists: function (playlist) {
+            this.call('/users/' + this.me.getId() + '/playlists', {name: title, public: true}, function (response) {
+                console.log('Playlist created for spotify: ' + response.id);
+                playlist.setId(response.id).setSync(true);
             }, 'post');
         },
-        setRefreshToken: function () {
-            Vue.http.headers.common['Authorization'] = 'Basic ' + btoa(this.appId + 'd7a5703c5e7c4cae87f8aff3fcd1c417');
-
-            this.$http.post(
-                'https://accounts.spotify.com/api/token',
-                {
-                    grant_type: 'authorization_code',
-                    code: this.login.accessToken,
-                    redirect_uri: this.callback
-                },
-                function (response) {
-                    this.login.accessToken = response.auth_token;
-                    this.login.refreshToken = response.refresh_token;
-                    this.login.response = response;
-                }
-            );
-        },
-        refreshToken: function () {
-            Vue.http.headers.common['Authorization'] = 'Basic ' + btoa(this.appId + 'd7a5703c5e7c4cae87f8aff3fcd1c417');
-
-            this.$http({
-                url: 'https://accounts.spotify.com/api/token',
-                method: 'post',
-                data: {
-                    grant_type: 'authorization_code',
-                    refresh_token: this.login.refreshToken
-                }
-            }).then(function (response) {
-                this.login.accessToken = response.auth_token;
-                this.login.response = response;
+        getPlaylistTracks: function (playlistId) {
+            var playlist = this.getPlaylist(playlistId);
+            this.call('/users/' + this.me.getId() + '/playlists/' + playlistId + '/tracks', function (response) {
+                response.items.forEach(function (r) {
+                    playlist.setTracks(
+                        new Track()
+                            .setId(r.id)
+                            .setTitle(r.title)
+                            .setArtist(
+                                new Artist()
+                                    .setId(r.artists[0].id)
+                                    .setName(r.artists[0].name)
+                                    .setPicture('')
+                            )
+                            .setAlbum(
+                                new Album()
+                                    .setId(r.album.id)
+                                    .setTitle(r.album.title)
+                                    .setCover(r.album.images[0].url)
+                            )
+                    );
+                });
             });
+        },
+        setPlaylistTracks: function (playlist) {
+            var trackList = [];
+            playlist.getTracks().forEach(function (r) {
+                if (r.getSync()) {
+                    trackList.push('spotify:track' + r.getId());
+                }
+            });
+
+            this.call('/users/' + this.me.getId() + '/playlists/' + playlist.getId() + '/tracks', {uris: trackList.join(',')}, function (response) {
+                console.log('Added tracks to playlist');
+                playlist.setSync(true);
+            });
+        },
+        findTrack: function (track) {
+            this.call('/search', {q: track.getTitle(), type: 'track'}, function (response) {
+                if (!response.tracks.items.length) {
+                    console.log(track.getTitle() + ' track is not found on ' + app.target.name);
+                    track.setSync(false);
+                }
+
+                track.setId(response.tracks.items[0].id);
+            })
         }
     }
 });
@@ -272,17 +407,7 @@ var app = new Vue({
             return typeof globalThat[provider].login.status != 'undefined' ? globalThat[provider].login.status : false;
         },
         login: function (provider) {
-            switch (provider) {
-                case 'deezer':
-                    deezer.getLogin();
-                    break;
-                case 'spotify':
-                    this.spotifyLogin();
-                    break;
-                default:
-                    this.loginError = 'Not accepted!';
-                    return false;
-            }
+            globalThat[provider].getLogin();
         },
         sourceChange: function () {
             this.source.playlists = [];
@@ -302,19 +427,17 @@ var app = new Vue({
             this.getPlaylists(this.target.name, 'target');
         },
         getPlaylists: function (provider, type) {
-            switch (provider) {
-                case 'deezer':
-                    this.getDeezerPlaylists();
-                    break;
-                case 'spotify':
-                    this.getSpotifyPlaylists();
-                    break;
-                default:
-                    return false;
-            }
+            globalThat[provider].getPlaylists(provider, type);
         },
-        movePlaylist: function (playlist) {
+        movePlaylist: function (playlistId) {
+            var playlist = [];
 
+            // TODO: Kaynak playlist'inin şarkı listesini çek
+            globalThat[this.source.name].getPlaylistTracks(playlistId);
+            // TODO: Kaynaktan playlist'i bul
+            playlist = globalThat[this.source].getPlaylist(playlistId);
+            // TODO: Playlist'i hedef playlist'lerine ekle şarkı listesi ile birlikte (sync:false)
+            globalThat[this.target.name].playlists.push(playlist);
         }
     }
 });
@@ -340,6 +463,7 @@ function Me() {
     this.id = '';
     this.username = '';
     this.avatar = '';
+
     this.getId = function () {
         return this.id;
     };
@@ -358,6 +482,146 @@ function Me() {
     this.setAvatar = function (avatar) {
         this.avatar = avatar;
     }
+}
+
+function Playlist() {
+    this.id = null;
+    this.title = '';
+    this.picture = '';
+
+    var sync = true,
+        tracks = [];
+
+    this.getId = function () {
+        return this.id;
+    };
+    this.setId = function (id) {
+        this.id = id;
+    };
+    this.getTitle = function () {
+        return this.title;
+    };
+    this.setTitle = function (title) {
+        this.title = title;
+    };
+    this.getPicture = function () {
+        return this.picture;
+    };
+    this.setPicture = function (picture) {
+        this.picture = picture;
+    };
+    this.getTracks = function () {
+        return tracks;
+    };
+    this.setTracks = function (tracks) {
+        tracks.push(tracks);
+    };
+    this.getTracksCount = function () {
+        return tracks.length;
+    };
+    this.getSync = function () {
+        return sync;
+    };
+    this.setSync = function (arg) {
+        sync = arg;
+    }
+}
+
+function Track() {
+    this.id = null;
+    this.title = '';
+    this.artist = {};
+    this.album = {};
+
+    var isLocal = false,
+        sync = true;
+
+    this.getId = function () {
+        return this.id;
+    };
+    this.setId = function (id) {
+        this.id = id;
+    };
+    this.getTitle = function () {
+        return this.title;
+    };
+    this.setTitle = function (title) {
+        this.title = title;
+    };
+    this.getArtist = function () {
+        return this.artist;
+    };
+    this.setArtist = function (artist) {
+        this.artist = artist;
+    };
+    this.getAlbum = function () {
+        return this.album;
+    };
+    this.setAlbum = function (album) {
+        this.album = album;
+    };
+    this.getIsLocal = function () {
+        return isLocal;
+    };
+    this.setIsLocal = function (local) {
+        isLocal = local;
+    };
+    this.getSync = function () {
+        return sync;
+    };
+    this.setSync = function (arg) {
+        sync = arg;
+    };
+}
+
+function Artist() {
+    this.id = null;
+    this.name = '';
+    this.picture = '';
+
+    this.getId = function () {
+        return this.id;
+    };
+    this.setId = function (id) {
+        this.id = id;
+    };
+    this.getName = function () {
+        return this.name;
+    };
+    this.setName = function (name) {
+        this.name = name;
+    };
+    this.getPicture = function () {
+        return this.picture;
+    };
+    this.setPicture = function (picture) {
+        this.picture = picture;
+    };
+}
+
+function Album() {
+    this.id = null;
+    this.title = '';
+    this.cover = '';
+
+    this.getId = function () {
+        return this.id;
+    };
+    this.setId = function (id) {
+        this.id = id;
+    };
+    this.getTitle = function () {
+        return this.title;
+    };
+    this.setTitle = function (title) {
+        this.title = title;
+    };
+    this.getCover = function () {
+        return this.cover;
+    };
+    this.setCover = function (cover) {
+        this.cover = cover;
+    };
 }
 
 function parseArgs() {
